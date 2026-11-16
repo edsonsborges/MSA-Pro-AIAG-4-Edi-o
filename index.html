@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSA Pro - Análise do Sistema de Medição (AIAG 4ª Ed.)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js para gráficos de controle e regressão -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; font-weight: 600; }
+        /* Estilização suave para barras de rolagem em tabelas */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @media print {
+            header button, nav { display: none !important; }
+            section { display: block !important; page-break-after: always; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Cabeçalho Principal -->
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2 rounded-lg">
+                    <i data-lucide="ruler" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">MSA Pro <span class="text-blue-400 font-normal text-sm ml-1">AIAG 4ª Edição</span></h1>
+                    <p class="text-xs text-slate-400">Análise Estatística de Sistemas de Medição</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+                <button onclick="loadSampleData()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg border border-slate-700 transition flex items-center gap-1.5">
+                    <i data-lucide="database" class="w-4 h-4 text-blue-400"></i>
+                    Restaurar Dados de Exemplo
+                </button>
+                <button onclick="exportReport()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                    <i data-lucide="printer" class="w-4 h-4"></i>
+                    Imprimir / PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- Navegação por Abas -->
+        <nav class="bg-white border-b border-slate-200 text-slate-600 overflow-x-auto">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-6 whitespace-nowrap">
+                <button onclick="switchTab('grr')" id="tab-grr" class="py-3.5 px-1 text-sm tab-active flex items-center gap-2 transition">
+                    <i data-lucide="layers" class="w-4 h-4"></i>
+                    Gage R&R (Repetibilidade & Reprodutibilidade)
+                </button>
+                <button onclick="switchTab('bias')" id="tab-bias" class="py-3.5 px-1 text-sm hover:text-slate-900 flex items-center gap-2 transition">
+                    <i data-lucide="target" class="w-4 h-4"></i>
+                    Tendência (Bias)
+                </button>
+                <button onclick="switchTab('linearity')" id="tab-linearity" class="py-3.5 px-1 text-sm hover:text-slate-900 flex items-center gap-2 transition">
+                    <i data-lucide="trending-up" class="w-4 h-4"></i>
+                    Linearidade
+                </button>
+                <button onclick="switchTab('stability')" id="tab-stability" class="py-3.5 px-1 text-sm hover:text-slate-900 flex items-center gap-2 transition">
+                    <i data-lucide="activity" class="w-4 h-4"></i>
+                    Estabilidade
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Notificação Toast Customizada -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2.5 text-sm">
+        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>
+        <span id="toast-msg">Cálculo atualizado!</span>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- =====================================================================
+             ABA 1: GAGE R&R (MÉDIA E AMPLITUDE)
+             ===================================================================== -->
+        <section id="sec-grr" class="space-y-6">
+            <!-- Painel de Configuração do Estudo -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">Estudo de R&R — Método da Média e Amplitude (X&#772; &amp; R)</h2>
+                        <p class="text-xs text-slate-500">Avalia a variação do equipamento (EV) e dos avaliadores (AV) conforme manual AIAG 4ª Edição.</p>
+                    </div>
+                    <button onclick="calculateGRR()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                        <i data-lucide="calculator" class="w-4 h-4"></i>
+                        Calcular R&R
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Nº de Peças (n)</label>
+                        <select id="grr-parts" onchange="rebuildGRRTable()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="5">5 Peças</option>
+                            <option value="10" selected>10 Peças (Padrão)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Nº de Avaliadores (k)</label>
+                        <select id="grr-appraisers" onchange="rebuildGRRTable()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="2">2 Avaliadores</option>
+                            <option value="3" selected>3 Avaliadores (Padrão)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Nº de Réplicas (r)</label>
+                        <select id="grr-trials" onchange="rebuildGRRTable()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="2">2 Réplicas</option>
+                            <option value="3" selected>3 Réplicas (Padrão)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Tolerância do Processo (LSE - LIE)</label>
+                        <input type="number" step="any" id="grr-tolerance" value="0.50" onchange="calculateGRR()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: 0.50">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Planilha de Coleta de Dados R&R -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Planilha de Medições</h3>
+                    <span class="text-xs text-slate-400">Edite os valores diretamente nas células</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table id="grr-table" class="w-full text-xs text-center border-collapse">
+                        <!-- Gerado dinamicamente via JS -->
+                    </table>
+                </div>
+            </div>
+
+            <!-- Resultados e Diagnóstico R&R -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Tabela de Componentes de Variação -->
+                <div class="lg:col-span-2 bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Componentes de Variação (6,0 &sigma;)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-600 border-b border-slate-200">
+                                    <th class="py-2.5 px-3 rounded-tl-lg">Fonte de Variação</th>
+                                    <th class="py-2.5 px-3 text-right">Desvio Padrão (&sigma;)</th>
+                                    <th class="py-2.5 px-3 text-right">Variação Estudo (6&sigma;)</th>
+                                    <th class="py-2.5 px-3 text-right">% Variação Total (%TV)</th>
+                                    <th class="py-2.5 px-3 text-right rounded-tr-lg">% Tolerância (%Tol)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="grr-results-body" class="divide-y divide-slate-100">
+                                <!-- Preenchido via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Card de Veredito AIAG -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Critérios de Aceitação AIAG</h3>
+                        
+                        <div class="space-y-4">
+                            <div class="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-xs font-medium text-slate-500">%GRR (Variação Total)</span>
+                                    <span id="badge-grr-status" class="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-700">APROVADO</span>
+                                </div>
+                                <div class="text-2xl font-bold text-slate-800" id="val-pct-grr">0.00%</div>
+                                <p class="text-[11px] text-slate-500 mt-1">Meta: &lt; 10% (Ideal) | 10% a 30% (Aceitável c/ ressalvas)</p>
+                            </div>
+
+                            <div class="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-xs font-medium text-slate-500">Categorias Distintas (ndc)</span>
+                                    <span id="badge-ndc-status" class="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-700">ADEQUADO</span>
+                                </div>
+                                <div class="text-2xl font-bold text-slate-800" id="val-ndc">0</div>
+                                <p class="text-[11px] text-slate-500 mt-1">Meta AIAG: ndc &ge; 5 categorias distintas</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="grr-conclusion-box" class="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-100 text-xs text-blue-800">
+                        <!-- Diagnóstico textual -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráficos R&R -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3">Carta de Amplitude (R) por Avaliador</h3>
+                    <div class="h-64"><canvas id="chart-grr-r"></canvas></div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3">Carta de Médias (X&#772;) por Peça e Avaliador</h3>
+                    <div class="h-64"><canvas id="chart-grr-x"></canvas></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =====================================================================
+             ABA 2: TENDÊNCIA (BIAS)
+             ===================================================================== -->
+        <section id="sec-bias" class="hidden space-y-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">Estudo de Tendência (Bias) — Método da Amostra Independente</h2>
+                        <p class="text-xs text-slate-500">Compara a média das medições de uma peça padrão com seu Valor de Referência (VR) rastreável.</p>
+                    </div>
+                    <button onclick="calculateBias()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                        <i data-lucide="calculator" class="w-4 h-4"></i>
+                        Calcular Tendência
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Entrada de Dados -->
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Valor de Referência Padrão (VR)</label>
+                            <input type="number" step="any" id="bias-ref" value="6.00" onchange="calculateBias()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Variação Total do Processo (TV) <span class="text-slate-400 font-normal">(Opcional, para %Bias)</span></label>
+                            <input type="number" step="any" id="bias-tv" value="0.50" onchange="calculateBias()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Leituras da Peça Padrão (n &ge; 10, separadas por vírgula ou linha)</label>
+                            <textarea id="bias-readings" rows="6" onchange="calculateBias()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none">5.8, 5.7, 5.9, 5.9, 6.0, 6.1, 6.0, 5.9, 5.8, 6.0, 5.9, 5.9, 6.0, 5.9, 5.8</textarea>
+                        </div>
+                    </div>
+
+                    <!-- Resultados Estatísticos Bias -->
+                    <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                            <span class="text-xs font-semibold text-slate-500 uppercase">Média das Leituras (X&#772;)</span>
+                            <div class="text-2xl font-bold text-slate-800 mt-1" id="bias-mean">0.0000</div>
+                            <div class="text-xs text-slate-500 mt-1">Tamanho da amostra (n): <span id="bias-n" class="font-semibold">0</span></div>
+                        </div>
+
+                        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                            <span class="text-xs font-semibold text-slate-500 uppercase">Tendência (Bias = X&#772; - VR)</span>
+                            <div class="text-2xl font-bold text-blue-600 mt-1" id="bias-val">0.0000</div>
+                            <div class="text-xs text-slate-500 mt-1">%Tendência (%Bias): <span id="bias-pct" class="font-semibold">0.00%</span></div>
+                        </div>
+
+                        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                            <span class="text-xs font-semibold text-slate-500 uppercase">Desvio Padrão Repetibilidade (&sigma;<sub>r</sub>)</span>
+                            <div class="text-xl font-bold text-slate-800 mt-1" id="bias-std">0.0000</div>
+                            <div class="text-xs text-slate-500 mt-1">Erro Padrão da Média (&sigma;<sub>x&#772;</sub>): <span id="bias-se" class="font-semibold">0.0000</span></div>
+                        </div>
+
+                        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                            <span class="text-xs font-semibold text-slate-500 uppercase">Intervalo de Confiança (95%)</span>
+                            <div class="text-base font-bold text-slate-800 mt-1" id="bias-ci">[0.0000 ; 0.0000]</div>
+                            <div class="text-xs text-slate-500 mt-1">Estatística t: <span id="bias-t" class="font-semibold">0.000</span> (t<sub>crítico</sub>: <span id="bias-tcrit">0.000</span>)</div>
+                        </div>
+
+                        <!-- Veredito Bias -->
+                        <div id="bias-verdict" class="sm:col-span-2 p-4 rounded-xl border flex items-start gap-3">
+                            <!-- Preenchido via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfico Histograma / Dispersão Bias -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-700 mb-3">Comportamento das Leituras vs. Valor de Referência (VR)</h3>
+                <div class="h-64"><canvas id="chart-bias"></canvas></div>
+            </div>
+        </section>
+
+        <!-- =====================================================================
+             ABA 3: LINEARIDADE
+             ===================================================================== -->
+        <section id="sec-linearity" class="hidden space-y-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">Estudo de Linearidade</h2>
+                        <p class="text-xs text-slate-500">Avalia a diferença nos valores de tendência ao longo da faixa normal de operação do instrumento (mínimo 5 peças).</p>
+                    </div>
+                    <button onclick="calculateLinearity()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                        <i data-lucide="calculator" class="w-4 h-4"></i>
+                        Calcular Linearidade
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Tabela de Entrada Linearidade -->
+                    <div class="lg:col-span-7 overflow-x-auto">
+                        <div class="mb-3 flex items-center gap-3">
+                            <label class="text-xs font-semibold text-slate-600">Variação Total do Processo (TV):</label>
+                            <input type="number" step="any" id="lin-tv" value="10.0" onchange="calculateLinearity()" class="w-28 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-sm outline-none">
+                        </div>
+                        <table class="w-full text-xs text-center border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-600 border-b border-slate-200">
+                                    <th class="py-2 px-2">Peça</th>
+                                    <th class="py-2 px-2">Valor Ref. (x)</th>
+                                    <th class="py-2 px-2">Medições (separadas por vírgula)</th>
+                                    <th class="py-2 px-2">Média</th>
+                                    <th class="py-2 px-2">Bias Médio</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lin-table-body" class="divide-y divide-slate-100">
+                                <!-- Gerado via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Resultados Regressão Linear -->
+                    <div class="lg:col-span-5 space-y-4">
+                        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                            <h3 class="text-xs font-bold text-slate-600 uppercase">Equação de Regressão: Bias = b<sub>0</sub> + b<sub>1</sub> &middot; x</h3>
+                            <div class="grid grid-cols-2 gap-3 pt-2">
+                                <div>
+                                    <span class="text-[11px] text-slate-500 block">Inclinação (b<sub>1</sub>)</span>
+                                    <span class="text-lg font-bold text-slate-800" id="lin-slope">0.0000</span>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] text-slate-500 block">Intercepto (b<sub>0</sub>)</span>
+                                    <span class="text-lg font-bold text-slate-800" id="lin-intercept">0.0000</span>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] text-slate-500 block">Linearidade (|b<sub>1</sub>| &times; TV)</span>
+                                    <span class="text-lg font-bold text-blue-600" id="lin-val">0.0000</span>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] text-slate-500 block">%Linearidade</span>
+                                    <span class="text-lg font-bold text-blue-600" id="lin-pct">0.00%</span>
+                                </div>
+                            </div>
+                            <div class="pt-2 border-t border-slate-200 flex justify-between text-xs text-slate-600">
+                                <span>Coef. Determinação (R<sup>2</sup>): <strong id="lin-r2">0.00%</strong></span>
+                                <span>Teste t Inclinação (t<sub>b1</sub>): <strong id="lin-tb1">0.000</strong></span>
+                            </div>
+                        </div>
+
+                        <div id="lin-verdict" class="p-4 rounded-xl border text-xs">
+                            <!-- Diagnóstico Linearidade -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfico Linearidade -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-700 mb-3">Gráfico de Linearidade (Tendência vs. Valor de Referência)</h3>
+                <div class="h-72"><canvas id="chart-linearity"></canvas></div>
+            </div>
+        </section>
+
+        <!-- =====================================================================
+             ABA 4: ESTABILIDADE
+             ===================================================================== -->
+        <section id="sec-stability" class="hidden space-y-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">Estudo de Estabilidade (Carta de Controle X&#772; &amp; R)</h2>
+                        <p class="text-xs text-slate-500">Monitora a consistência do sistema de medição ao longo do tempo utilizando uma peça padrão.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="addStabilitySubgroup()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-1">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Subgrupo
+                        </button>
+                        <button onclick="calculateStability()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                            <i data-lucide="calculator" class="w-4 h-4"></i>
+                            Atualizar Cartas
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Tabela Subgrupos Estabilidade -->
+                    <div class="lg:col-span-7 overflow-x-auto max-h-80">
+                        <table class="w-full text-xs text-center border-collapse">
+                            <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b border-slate-200">
+                                <tr>
+                                    <th class="py-2 px-2">Subgrupo / Data</th>
+                                    <th class="py-2 px-2">Leitura 1</th>
+                                    <th class="py-2 px-2">Leitura 2</th>
+                                    <th class="py-2 px-2">Leitura 3</th>
+                                    <th class="py-2 px-2">Média (X&#772;)</th>
+                                    <th class="py-2 px-2">Amplitude (R)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stab-table-body" class="divide-y divide-slate-100">
+                                <!-- Gerado via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Resumo Estatístico Estabilidade -->
+                    <div class="lg:col-span-5 space-y-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <span class="text-[11px] font-bold text-slate-500 uppercase">Carta de Médias (X&#772;&#772;)</span>
+                                <div class="text-lg font-bold text-slate-800 mt-0.5" id="stab-xbar">0.000</div>
+                                <div class="text-[11px] text-slate-500 mt-1">
+                                    LSC: <span id="stab-ucl-x" class="font-mono font-semibold">0.000</span><br>
+                                    LIC: <span id="stab-lcl-x" class="font-mono font-semibold">0.000</span>
+                                </div>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <span class="text-[11px] font-bold text-slate-500 uppercase">Carta de Amplitude (R&#772;)</span>
+                                <div class="text-lg font-bold text-slate-800 mt-0.5" id="stab-rbar">0.000</div>
+                                <div class="text-[11px] text-slate-500 mt-1">
+                                    LSC: <span id="stab-ucl-r" class="font-mono font-semibold">0.000</span><br>
+                                    LIC: <span id="stab-lcl-r" class="font-mono font-semibold">0.000</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="stab-verdict" class="p-4 rounded-xl border text-xs">
+                            <!-- Status de Estabilidade -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráficos de Controle Estabilidade -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3">Carta de Controle de Médias (X&#772;)</h3>
+                    <div class="h-64"><canvas id="chart-stab-x"></canvas></div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3">Carta de Controle de Amplitude (R)</h3>
+                    <div class="h-64"><canvas id="chart-stab-r"></canvas></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Rodapé -->
+    <footer class="bg-white border-t border-slate-200 py-4 mt-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-2">
+            <span>MSA Pro — Baseado nas diretrizes do Manual AIAG MSA 4ª Edição</span>
+            <span>Constantes estatísticas: d<sub>2</sub>, d<sub>2</sub>*, D<sub>3</sub>, D<sub>4</sub>, A<sub>2</sub> padronizadas</span>
+        </div>
+    </footer>
+
+    <!-- Lógica Completa dos Cálculos Estatísticos MSA -->
+    <script>
+        // Inicializar ícones Lucide
+        lucide.createIcons();
+
+        // =========================================================================
+        // TABELAS DE CONSTANTES ESTATÍSTICAS (AIAG MSA 4ª EDIÇÃO)
+        // =========================================================================
+        const D2_TABLE = {
+            2: 1.128, 3: 1.693, 4: 2.059, 5: 2.326,
+            6: 2.534, 7: 2.704, 8: 2.847, 9: 2.970, 10: 3.078
+        };
+
+        const D2_STAR_G1 = {
+            2: 1.414, 3: 1.912, 4: 2.239, 5: 2.481,
+            6: 2.673, 7: 2.830, 8: 2.963, 9: 3.078, 10: 3.179
+        };
+
+        const CONTROL_CONSTANTS = {
+            2: { A2: 1.880, D3: 0, D4: 3.267 },
+            3: { A2: 1.023, D3: 0, D4: 2.574 },
+            4: { A2: 0.729, D3: 0, D4: 2.282 },
+            5: { A2: 0.577, D3: 0, D4: 2.114 }
+        };
+
+        const T_CRIT_95 = {
+            1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+            6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+            11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
+            16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
+            25: 2.060, 30: 2.042, 40: 2.021, 50: 2.009, 60: 2.000
+        };
+
+        function getTCritical(df) {
+            if (df <= 1) return T_CRIT_95[1];
+            if (T_CRIT_95[df]) return T_CRIT_95[df];
+            const keys = Object.keys(T_CRIT_95).map(Number).sort((a, b) => a - b);
+            for (let i = 0; i < keys.length - 1; i++) {
+                if (df > keys[i] && df < keys[i + 1]) {
+                    const ratio = (df - keys[i]) / (keys[i + 1] - keys[i]);
+                    return T_CRIT_95[keys[i]] + ratio * (T_CRIT_95[keys[i + 1]] - T_CRIT_95[keys[i]]);
+                }
+            }
+            return 1.960;
+        }
+
+        let charts = {};
+
+        const SAMPLE_GRR_DATA = [
+            [[0.29, 0.41, 0.64], [0.08, 0.25, 0.07], [0.04, -0.11, -0.15]],
+            [[-0.56, -0.68, -0.58], [-0.47, -1.22, -0.68], [-1.38, -1.13, -0.96]],
+            [[1.34, 1.17, 1.27], [1.19, 0.94, 1.34], [0.88, 1.09, 0.67]],
+            [[0.47, 0.50, 0.64], [0.01, 1.03, 0.20], [0.14, 0.20, 0.11]],
+            [[-0.80, -0.92, -0.84], [-0.56, -1.20, -1.28], [-1.46, -1.07, -1.45]],
+            [[0.02, -0.11, -0.21], [-0.20, 0.22, 0.06], [-0.29, -0.67, -0.49]],
+            [[0.59, 0.75, 0.66], [0.47, 0.55, 0.83], [0.02, 0.01, 0.21]],
+            [[-0.31, -0.20, -0.17], [-0.63, 0.08, -0.34], [-0.46, -0.56, -0.49]],
+            [[2.26, 1.99, 2.01], [1.80, 2.12, 2.19], [1.77, 1.45, 1.87]],
+            [[-1.36, -1.25, -1.31], [-1.68, -1.62, -1.50], [-1.49, -1.77, -2.16]]
+        ];
+
+        const SAMPLE_LINEARITY = [
+            { ref: 2.0, vals: [2.7, 2.5, 2.4, 2.5, 2.7, 2.3, 2.5, 2.5, 2.4, 2.4, 2.6, 2.4] },
+            { ref: 4.0, vals: [5.1, 3.9, 4.2, 5.0, 3.8, 3.9, 3.9, 3.9, 3.9, 4.0, 4.1, 3.8] },
+            { ref: 6.0, vals: [5.8, 5.7, 5.9, 5.9, 6.0, 6.1, 6.0, 5.9, 5.8, 6.0, 5.9, 5.9] },
+            { ref: 8.0, vals: [7.6, 7.7, 7.8, 7.7, 7.8, 7.5, 7.5, 7.7, 7.8, 7.5, 7.5, 7.8] },
+            { ref: 10.0, vals: [9.1, 9.3, 9.5, 9.3, 9.4, 9.5, 9.5, 9.5, 9.6, 9.2, 9.3, 9.4] }
+        ];
+
+        const SAMPLE_STABILITY = [
+            { label: 'Dia 1', vals: [10.02, 10.01, 10.03] },
+            { label: 'Dia 2', vals: [10.00, 10.02, 10.01] },
+            { label: 'Dia 3', vals: [9.99, 10.01, 10.00] },
+            { label: 'Dia 4', vals: [10.02, 10.04, 10.01] },
+            { label: 'Dia 5', vals: [10.01, 9.98, 10.00] },
+            { label: 'Dia 6', vals: [10.03, 10.02, 10.02] },
+            { label: 'Dia 7', vals: [9.98, 10.00, 9.99] },
+            { label: 'Dia 8', vals: [10.01, 10.01, 10.02] }
+        ];
+
+        // =========================================================================
+        // CONTROLE DE NAVEGAÇÃO E UI
+        // =========================================================================
+        function switchTab(tabId) {
+            ['grr', 'bias', 'linearity', 'stability'].forEach(id => {
+                document.getElementById(`sec-${id}`).classList.add('hidden');
+                document.getElementById(`tab-${id}`).classList.remove('tab-active');
+            });
+            document.getElementById(`sec-${tabId}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabId}`).classList.add('tab-active');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+
+        function exportReport() {
+            window.print();
+        }
+
+        // =========================================================================
+        // MÓDULO 1: GAGE R&R (MÉDIA E AMPLITUDE)
+        // =========================================================================
+        function rebuildGRRTable(useSample = false) {
+            const nParts = parseInt(document.getElementById('grr-parts').value);
+            const nApp = parseInt(document.getElementById('grr-appraisers').value);
+            const nTrials = parseInt(document.getElementById('grr-trials').value);
+            const table = document.getElementById('grr-table');
+            const appNames = ['Avaliador A', 'Avaliador B', 'Avaliador C'];
+
+            let html = '<thead><tr class="bg-slate-100 text-slate-700 border-b border-slate-300">';
+            html += '<th rowspan="2" class="py-2 px-2 border-r border-slate-200">Peça</th>';
+            for (let a = 0; a < nApp; a++) {
+                html += `<th colspan="${nTrials + 2}" class="py-1.5 px-2 border-r border-slate-300 bg-slate-200/60 font-bold">${appNames[a]}</th>`;
+            }
+            html += '<th rowspan="2" class="py-2 px-2 bg-blue-50 text-blue-800">Média Peça (X&#772;<sub>p</sub>)</th>';
+            html += '</tr><tr class="bg-slate-50 text-slate-500 border-b border-slate-200">';
+            for (let a = 0; a < nApp; a++) {
+                for (let t = 0; t < nTrials; t++) {
+                    html += `<th class="py-1 px-1">Rep ${t + 1}</th>`;
+                }
+                html += `<th class="py-1 px-1 text-blue-700 font-semibold">Média</th>`;
+                html += `<th class="py-1 px-1 text-amber-700 font-semibold border-r border-slate-300">Amp (R)</th>`;
+            }
+            html += '</tr></thead><tbody class="divide-y divide-slate-200">';
+
+            for (let p = 0; p < nParts; p++) {
+                html += `<tr class="hover:bg-slate-50"><td class="font-bold text-slate-700 py-1.5 px-2 border-r border-slate-200">#${p + 1}</td>`;
+                for (let a = 0; a < nApp; a++) {
+                    for (let t = 0; t < nTrials; t++) {
+                        let val = 0;
+                        if (useSample && SAMPLE_GRR_DATA[p] && SAMPLE_GRR_DATA[p][a] && SAMPLE_GRR_DATA[p][a][t] !== undefined) {
+                            val = SAMPLE_GRR_DATA[p][a][t];
+                        } else {
+                            val = ((p - nParts / 2) * 0.4 + (Math.random() - 0.5) * 0.2).toFixed(2);
+                        }
+                        html += `<td class="p-1"><input type="number" step="any" id="grr-cell-${p}-${a}-${t}" value="${val}" onchange="calculateGRR()" class="w-14 text-center bg-white border border-slate-200 rounded py-1 focus:border-blue-500 outline-none"></td>`;
+                    }
+                    html += `<td id="grr-avg-${p}-${a}" class="px-1.5 font-mono text-blue-700 bg-blue-50/30">0.00</td>`;
+                    html += `<td id="grr-rng-${p}-${a}" class="px-1.5 font-mono text-amber-700 bg-amber-50/30 border-r border-slate-300">0.00</td>`;
+                }
+                html += `<td id="grr-pavg-${p}" class="px-2 font-mono font-bold text-slate-800 bg-blue-50/50">0.00</td></tr>`;
+            }
+            html += '</tbody>';
+            table.innerHTML = html;
+            calculateGRR();
+        }
+
+        function calculateGRR() {
+            const nParts = parseInt(document.getElementById('grr-parts').value);
+            const nApp = parseInt(document.getElementById('grr-appraisers').value);
+            const nTrials = parseInt(document.getElementById('grr-trials').value);
+            const tolerance = parseFloat(document.getElementById('grr-tolerance').value) || 1.0;
+
+            let appMeans = new Array(nApp).fill(0);
+            let appRBars = new Array(nApp).fill(0);
+            let partMeans = new Array(nParts).fill(0);
+            let totalRBar = 0;
+
+            let chartRLabels = [];
+            let chartRData = [];
+            let chartXDatasets = [];
+            const colors = ['#2563eb', '#10b981', '#f59e0b'];
+            const appNames = ['Avaliador A', 'Avaliador B', 'Avaliador C'];
+
+            for (let a = 0; a < nApp; a++) {
+                chartXDatasets.push({
+                    label: appNames[a],
+                    data: [],
+                    borderColor: colors[a],
+                    backgroundColor: colors[a],
+                    tension: 0.2
+                });
+            }
+
+            for (let p = 0; p < nParts; p++) {
+                let sumPart = 0;
+                for (let a = 0; a < nApp; a++) {
+                    let vals = [];
+                    for (let t = 0; t < nTrials; t++) {
+                        const v = parseFloat(document.getElementById(`grr-cell-${p}-${a}-${t}`).value) || 0;
+                        vals.push(v);
+                    }
+                    const mean = vals.reduce((acc, b) => acc + b, 0) / nTrials;
+                    const rng = Math.max(...vals) - Math.min(...vals);
+
+                    document.getElementById(`grr-avg-${p}-${a}`).textContent = mean.toFixed(3);
+                    document.getElementById(`grr-rng-${p}-${a}`).textContent = rng.toFixed(3);
+
+                    appMeans[a] += mean;
+                    appRBars[a] += rng;
+                    sumPart += mean;
+
+                    chartRLabels.push(`Av.${String.fromCharCode(65 + a)}-P${p + 1}`);
+                    chartRData.push(rng);
+                    chartXDatasets[a].data.push(mean);
+                }
+                partMeans[p] = sumPart / nApp;
+                document.getElementById(`grr-pavg-${p}`).textContent = partMeans[p].toFixed(3);
+            }
+
+            for (let a = 0; a < nApp; a++) {
+                appMeans[a] /= nParts;
+                appRBars[a] /= nParts;
+                totalRBar += appRBars[a];
+            }
+            totalRBar /= nApp;
+
+            const d2_trials = D2_TABLE[nTrials] || 1.693;
+            const d2_app = D2_STAR_G1[nApp] || 1.912;
+            const d2_parts = D2_STAR_G1[nParts] || 3.179;
+
+            const sigmaEV = totalRBar / d2_trials;
+            const EV = 6.0 * sigmaEV;
+
+            const xBarDiff = Math.max(...appMeans) - Math.min(...appMeans);
+            const avSq = Math.pow((6.0 * xBarDiff) / d2_app, 2) - (Math.pow(EV, 2) / (nParts * nTrials));
+            const AV = avSq > 0 ? Math.sqrt(avSq) : 0;
+            const sigmaAV = AV / 6.0;
+
+            const GRR = Math.sqrt(Math.pow(EV, 2) + Math.pow(AV, 2));
+            const sigmaGRR = GRR / 6.0;
+
+            const Rp = Math.max(...partMeans) - Math.min(...partMeans);
+            const PV = (6.0 * Rp) / d2_parts;
+            const sigmaPV = PV / 6.0;
+
+            const TV = Math.sqrt(Math.pow(GRR, 2) + Math.pow(PV, 2));
+            const sigmaTV = TV / 6.0;
+
+            const pctEV_TV = TV > 0 ? (EV / TV) * 100 : 0;
+            const pctAV_TV = TV > 0 ? (AV / TV) * 100 : 0;
+            const pctGRR_TV = TV > 0 ? (GRR / TV) * 100 : 0;
+            const pctPV_TV = TV > 0 ? (PV / TV) * 100 : 0;
+
+            const pctEV_Tol = (EV / tolerance) * 100;
+            const pctAV_Tol = (AV / tolerance) * 100;
+            const pctGRR_Tol = (GRR / tolerance) * 100;
+            const pctPV_Tol = (PV / tolerance) * 100;
+
+            const ndcRaw = GRR > 0 ? 1.41 * (PV / GRR) : 0;
+            const ndc = Math.floor(ndcRaw);
+
+            const rows = [
+                { name: 'Repetibilidade (EV - Equipamento)', s: sigmaEV, v: EV, ptv: pctEV_TV, ptol: pctEV_Tol, bold: false },
+                { name: 'Reprodutibilidade (AV - Avaliadores)', s: sigmaAV, v: AV, ptv: pctAV_TV, ptol: pctAV_Tol, bold: false },
+                { name: 'R&R Total (GRR)', s: sigmaGRR, v: GRR, ptv: pctGRR_TV, ptol: pctGRR_Tol, bold: true, highlight: true },
+                { name: 'Variação Peça-a-Peça (PV)', s: sigmaPV, v: PV, ptv: pctPV_TV, ptol: pctPV_Tol, bold: false },
+                { name: 'Variação Total (TV)', s: sigmaTV, v: TV, ptv: 100.0, ptol: (TV / tolerance) * 100, bold: true }
+            ];
+
+            let tbodyHtml = '';
+            rows.forEach(r => {
+                const trClass = r.highlight ? 'bg-blue-50/70 font-bold text-blue-900' : (r.bold ? 'font-bold bg-slate-50' : '');
+                tbodyHtml += `
+                    <tr class="${trClass}">
+                        <td class="py-2.5 px-3">${r.name}</td>
+                        <td class="py-2.5 px-3 text-right font-mono">${r.s.toFixed(4)}</td>
+                        <td class="py-2.5 px-3 text-right font-mono">${r.v.toFixed(4)}</td>
+                        <td class="py-2.5 px-3 text-right font-mono">${r.ptv.toFixed(2)}%</td>
+                        <td class="py-2.5 px-3 text-right font-mono">${r.ptol.toFixed(2)}%</td>
+                    </tr>
+                `;
+            });
+            document.getElementById('grr-results-body').innerHTML = tbodyHtml;
+
+            document.getElementById('val-pct-grr').textContent = `${pctGRR_TV.toFixed(2)}%`;
+            document.getElementById('val-ndc').textContent = `${ndc} (${ndcRaw.toFixed(2)})`;
+
+            const badgeGrr = document.getElementById('badge-grr-status');
+            const conclusionBox = document.getElementById('grr-conclusion-box');
+
+            if (pctGRR_TV < 10) {
+                badgeGrr.className = 'px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-700';
+                badgeGrr.textContent = 'APROVADO (< 10%)';
+                conclusionBox.className = 'mt-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-900';
+                conclusionBox.innerHTML = '<strong>Sistema de Medição Aceitável:</strong> O erro de medição representa menos de 10% da variação do processo. Sistema apto para controle e melhoria.';
+            } else if (pctGRR_TV <= 30) {
+                badgeGrr.className = 'px-2 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-700';
+                badgeGrr.textContent = 'MARGINAL (10% - 30%)';
+                conclusionBox.className = 'mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900';
+                conclusionBox.innerHTML = `<strong>Aceitável com Ressalvas:</strong> O %GRR está entre 10% e 30%. Pode ser aceito dependendo da criticidade da aplicação ou custo de melhoria. Maior fonte: <strong>${EV > AV ? 'Repetibilidade (Equipamento)' : 'Reprodutibilidade (Avaliadores)'}</strong>.`;
+            } else {
+                badgeGrr.className = 'px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-700';
+                badgeGrr.textContent = 'REPROVADO (> 30%)';
+                conclusionBox.className = 'mt-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-900';
+                conclusionBox.innerHTML = `<strong>Sistema Inaceitável:</strong> O %GRR excede 30%. É necessário intervir no sistema antes de usá-lo. Foque em reduzir a <strong>${EV > AV ? 'Repetibilidade (manutenção/dispositivo)' : 'Reprodutibilidade (treinamento/método)'}</strong>.`;
+            }
+
+            const badgeNdc = document.getElementById('badge-ndc-status');
+            if (ndc >= 5) {
+                badgeNdc.className = 'px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-700';
+                badgeNdc.textContent = 'ADEQUADO (>= 5)';
+            } else {
+                badgeNdc.className = 'px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-700';
+                badgeNdc.textContent = 'INSUFICIENTE (< 5)';
+            }
+
+            const D4 = CONTROL_CONSTANTS[nTrials]?.D4 || 2.574;
+            const uclR = totalRBar * D4;
+
+            renderChart('chart-grr-r', 'line', {
+                labels: chartRLabels,
+                datasets: [
+                    { label: 'Amplitude (R)', data: chartRData, borderColor: '#2563eb', backgroundColor: '#2563eb', tension: 0.1 },
+                    { label: `LSC (${uclR.toFixed(3)})`, data: Array(chartRLabels.length).fill(uclR), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0 },
+                    { label: `Média R (${totalRBar.toFixed(3)})`, data: Array(chartRLabels.length).fill(totalRBar), borderColor: '#10b981', borderDash: [2, 2], pointRadius: 0 }
+                ]
+            });
+
+            renderChart('chart-grr-x', 'line', {
+                labels: Array.from({ length: nParts }, (_, i) => `Peça ${i + 1}`),
+                datasets: chartXDatasets
+            });
+        }
+
+        // =========================================================================
+        // MÓDULO 2: TENDÊNCIA (BIAS)
+        // =========================================================================
+        function calculateBias() {
+            const ref = parseFloat(document.getElementById('bias-ref').value) || 0;
+            const tv = parseFloat(document.getElementById('bias-tv').value) || 0;
+            const rawText = document.getElementById('bias-readings').value;
+
+            const readings = rawText.split(/[\s,;]+/).map(Number).filter(v => !isNaN(v));
+            const n = readings.length;
+            if (n < 2) return;
+
+            const mean = readings.reduce((a, b) => a + b, 0) / n;
+            const bias = mean - ref;
+            const variance = readings.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / (n - 1);
+            const stdDev = Math.sqrt(variance);
+            const stdError = stdDev / Math.sqrt(n);
+
+            const df = n - 1;
+            const tCrit = getTCritical(df);
+            const tStat = stdError > 0 ? Math.abs(bias) / stdError : 0;
+
+            const ciLower = bias - tCrit * stdError;
+            const ciUpper = bias + tCrit * stdError;
+            const pctBias = tv > 0 ? (Math.abs(bias) / tv) * 100 : 0;
+
+            document.getElementById('bias-mean').textContent = mean.toFixed(4);
+            document.getElementById('bias-n').textContent = n;
+            document.getElementById('bias-val').textContent = bias.toFixed(4);
+            document.getElementById('bias-pct').textContent = `${pctBias.toFixed(2)}%`;
+            document.getElementById('bias-std').textContent = stdDev.toFixed(4);
+            document.getElementById('bias-se').textContent = stdError.toFixed(4);
+            document.getElementById('bias-ci').textContent = `[ ${ciLower.toFixed(4)} ; ${ciUpper.toFixed(4)} ]`;
+            document.getElementById('bias-t').textContent = tStat.toFixed(3);
+            document.getElementById('bias-tcrit').textContent = tCrit.toFixed(3);
+
+            const isAcceptable = (ciLower <= 0 && ciUpper >= 0);
+            const verdictEl = document.getElementById('bias-verdict');
+
+            if (isAcceptable) {
+                verdictEl.className = 'sm:col-span-2 p-4 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 flex items-start gap-3';
+                verdictEl.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-emerald-600 shrink-0 mt-0.5"></i>
+                    <div class="text-xs"><strong>Tendência Estatisticamente Aceitável:</strong> O valor zero (0,0000) está contido dentro do intervalo de confiança de 95% (<em>t</em> = ${tStat.toFixed(2)} &le; <em>t<sub>crítico</sub></em> = ${tCrit.toFixed(2)}). Não há viés significativo no instrumento.</div>`;
+            } else {
+                verdictEl.className = 'sm:col-span-2 p-4 rounded-xl border bg-rose-50 border-rose-200 text-rose-900 flex items-start gap-3';
+                verdictEl.innerHTML = `<i data-lucide="alert-triangle" class="w-5 h-5 text-rose-600 shrink-0 mt-0.5"></i>
+                    <div class="text-xs"><strong>Tendência Significativa Detectada (Reprovado):</strong> O zero não está contido no intervalo de confiança de 95% (<em>t</em> = ${tStat.toFixed(2)} &gt; <em>t<sub>crítico</sub></em> = ${tCrit.toFixed(2)}). Recomenda-se recalibração ou ajuste de offset do instrumento.</div>`;
+            }
+            lucide.createIcons();
+
+            renderChart('chart-bias', 'line', {
+                labels: readings.map((_, i) => `Leitura ${i + 1}`),
+                datasets: [
+                    { label: 'Leituras', data: readings, borderColor: '#2563eb', backgroundColor: '#2563eb', tension: 0.1 },
+                    { label: `Valor Referência (${ref})`, data: Array(n).fill(ref), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0 },
+                    { label: `Média (${mean.toFixed(3)})`, data: Array(n).fill(mean), borderColor: '#10b981', borderDash: [2, 2], pointRadius: 0 }
+                ]
+            });
+        }
+
+        // =========================================================================
+        // MÓDULO 3: LINEARIDADE
+        // =========================================================================
+        function buildLinearityTable() {
+            const tbody = document.getElementById('lin-table-body');
+            let html = '';
+            SAMPLE_LINEARITY.forEach((item, idx) => {
+                html += `
+                    <tr>
+                        <td class="py-2 px-2 font-bold text-slate-700">#${idx + 1}</td>
+                        <td class="py-2 px-2"><input type="number" step="any" id="lin-ref-${idx}" value="${item.ref}" onchange="calculateLinearity()" class="w-16 text-center bg-slate-50 border border-slate-300 rounded py-1"></td>
+                        <td class="py-2 px-2"><input type="text" id="lin-vals-${idx}" value="${item.vals.join(', ')}" onchange="calculateLinearity()" class="w-full text-left bg-slate-50 border border-slate-300 rounded px-2 py-1 font-mono"></td>
+                        <td id="lin-avg-${idx}" class="py-2 px-2 font-mono text-slate-700">0.00</td>
+                        <td id="lin-bias-${idx}" class="py-2 px-2 font-mono font-bold text-blue-700">0.00</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+            calculateLinearity();
+        }
+
+        function calculateLinearity() {
+            const tv = parseFloat(document.getElementById('lin-tv').value) || 1.0;
+            let allPoints = [];
+            let partPoints = [];
+
+            for (let i = 0; i < SAMPLE_LINEARITY.length; i++) {
+                const ref = parseFloat(document.getElementById(`lin-ref-${i}`).value) || 0;
+                const vals = document.getElementById(`lin-vals-${i}`).value.split(/[\s,;]+/).map(Number).filter(v => !isNaN(v));
+                if (vals.length === 0) continue;
+
+                const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+                const avgBias = avg - ref;
+
+                document.getElementById(`lin-avg-${i}`).textContent = avg.toFixed(3);
+                document.getElementById(`lin-bias-${i}`).textContent = avgBias.toFixed(3);
+
+                partPoints.push({ x: ref, y: avgBias });
+                vals.forEach(v => {
+                    allPoints.push({ x: ref, y: v - ref });
+                });
+            }
+
+            const N = allPoints.length;
+            if (N < 3) return;
+
+            const sumX = allPoints.reduce((s, p) => s + p.x, 0);
+            const sumY = allPoints.reduce((s, p) => s + p.y, 0);
+            const sumXY = allPoints.reduce((s, p) => s + p.x * p.y, 0);
+            const sumX2 = allPoints.reduce((s, p) => s + p.x * p.x, 0);
+            const sumY2 = allPoints.reduce((s, p) => s + p.y * p.y, 0);
+
+            const meanX = sumX / N;
+            const meanY = sumY / N;
+            const Sxx = sumX2 - N * meanX * meanX;
+            const Syy = sumY2 - N * meanY * meanY;
+            const Sxy = sumXY - N * meanX * meanY;
+
+            const b1 = Sxx !== 0 ? Sxy / Sxx : 0;
+            const b0 = meanY - b1 * meanX;
+
+            const SSE = Syy - b1 * Sxy;
+            const s = Math.sqrt(Math.max(0, SSE) / (N - 2));
+            const se_b1 = Sxx > 0 ? s / Math.sqrt(Sxx) : 0;
+            const tb1 = se_b1 > 0 ? Math.abs(b1) / se_b1 : 0;
+            const tCrit = getTCritical(N - 2);
+
+            const r2 = Syy > 0 ? (Math.pow(Sxy, 2) / (Sxx * Syy)) * 100 : 0;
+            const linearity = Math.abs(b1) * tv;
+            const pctLinearity = (linearity / tv) * 100;
+
+            document.getElementById('lin-slope').textContent = b1.toFixed(4);
+            document.getElementById('lin-intercept').textContent = b0.toFixed(4);
+            document.getElementById('lin-val').textContent = linearity.toFixed(4);
+            document.getElementById('lin-pct').textContent = `${pctLinearity.toFixed(2)}%`;
+            document.getElementById('lin-r2').textContent = `${r2.toFixed(1)}%`;
+            document.getElementById('lin-tb1').textContent = `${tb1.toFixed(3)} (crít: ${tCrit.toFixed(2)})`;
+
+            const verdictEl = document.getElementById('lin-verdict');
+            if (tb1 <= tCrit) {
+                verdictEl.className = 'p-4 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 text-xs';
+                verdictEl.innerHTML = `<strong>Linearidade Aceitável:</strong> A inclinação da reta não é estatisticamente diferente de zero (<em>t<sub>b1</sub></em> = ${tb1.toFixed(2)} &le; ${tCrit.toFixed(2)}). O instrumento mantém o mesmo comportamento em toda a faixa.`;
+            } else {
+                verdictEl.className = 'p-4 rounded-xl border bg-rose-50 border-rose-200 text-rose-900 text-xs';
+                verdictEl.innerHTML = `<strong>Linearidade Não Aceitável:</strong> Há variação significativa da tendência ao longo da faixa de medição (<em>t<sub>b1</sub></em> = ${tb1.toFixed(2)} &gt; ${tCrit.toFixed(2)}). Verifique desgaste mecânico ou calibração multiponto.`;
+            }
+
+            const minX = Math.min(...allPoints.map(p => p.x));
+            const maxX = Math.max(...allPoints.map(p => p.x));
+
+            renderChart('chart-linearity', 'scatter', {
+                datasets: [
+                    {
+                        label: 'Tendências Individuais',
+                        data: allPoints,
+                        backgroundColor: 'rgba(148, 163, 184, 0.6)',
+                        pointRadius: 4
+                    },
+                    {
+                        label: 'Tendência Média por Peça',
+                        data: partPoints,
+                        backgroundColor: '#2563eb',
+                        pointRadius: 6
+                    },
+                    {
+                        type: 'line',
+                        label: `Reta Regressão (Bias = ${b0.toFixed(2)} + ${b1.toFixed(3)}x)`,
+                        data: [{ x: minX, y: b0 + b1 * minX }, { x: maxX, y: b0 + b1 * maxX }],
+                        borderColor: '#ef4444',
+                        borderWidth: 2,
+                        pointRadius: 0
+                    },
+                    {
+                        type: 'line',
+                        label: 'Bias = 0 (Ideal)',
+                        data: [{ x: minX, y: 0 }, { x: maxX, y: 0 }],
+                        borderColor: '#10b981',
+                        borderDash: [5, 5],
+                        pointRadius: 0
+                    }
+                ]
+            }, {
+                scales: {
+                    x: { title: { display: true, text: 'Valor de Referência (VR)' } },
+                    y: { title: { display: true, text: 'Tendência (Bias)' } }
+                }
+            });
+        }
+
+        // =========================================================================
+        // MÓDULO 4: ESTABILIDADE
+        // =========================================================================
+        let stabilityData = JSON.parse(JSON.stringify(SAMPLE_STABILITY));
+
+        function buildStabilityTable() {
+            const tbody = document.getElementById('stab-table-body');
+            let html = '';
+            stabilityData.forEach((sg, idx) => {
+                html += `
+                    <tr>
+                        <td class="py-1.5 px-2"><input type="text" id="stab-lbl-${idx}" value="${sg.label}" onchange="calculateStability()" class="w-20 text-center bg-slate-50 border border-slate-300 rounded py-1"></td>
+                        <td class="py-1.5 px-1"><input type="number" step="any" id="stab-v-${idx}-0" value="${sg.vals[0]}" onchange="calculateStability()" class="w-16 text-center bg-white border border-slate-200 rounded py-1"></td>
+                        <td class="py-1.5 px-1"><input type="number" step="any" id="stab-v-${idx}-1" value="${sg.vals[1]}" onchange="calculateStability()" class="w-16 text-center bg-white border border-slate-200 rounded py-1"></td>
+                        <td class="py-1.5 px-1"><input type="number" step="any" id="stab-v-${idx}-2" value="${sg.vals[2]}" onchange="calculateStability()" class="w-16 text-center bg-white border border-slate-200 rounded py-1"></td>
+                        <td id="stab-avg-${idx}" class="py-1.5 px-2 font-mono text-blue-700 font-semibold">0.000</td>
+                        <td id="stab-rng-${idx}" class="py-1.5 px-2 font-mono text-amber-700 font-semibold">0.000</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+            calculateStability();
+        }
+
+        function addStabilitySubgroup() {
+            const nextNum = stabilityData.length + 1;
+            stabilityData.push({ label: `Dia ${nextNum}`, vals: [10.00, 10.01, 10.00] });
+            buildStabilityTable();
+            showToast('Subgrupo adicionado!');
+        }
+
+        function calculateStability() {
+            let labels = [];
+            let xBars = [];
+            let rVals = [];
+
+            for (let i = 0; i < stabilityData.length; i++) {
+                const lbl = document.getElementById(`stab-lbl-${i}`).value;
+                const v0 = parseFloat(document.getElementById(`stab-v-${i}-0`).value) || 0;
+                const v1 = parseFloat(document.getElementById(`stab-v-${i}-1`).value) || 0;
+                const v2 = parseFloat(document.getElementById(`stab-v-${i}-2`).value) || 0;
+
+                stabilityData[i] = { label: lbl, vals: [v0, v1, v2] };
+
+                const mean = (v0 + v1 + v2) / 3;
+                const rng = Math.max(v0, v1, v2) - Math.min(v0, v1, v2);
+
+                document.getElementById(`stab-avg-${i}`).textContent = mean.toFixed(4);
+                document.getElementById(`stab-rng-${i}`).textContent = rng.toFixed(4);
+
+                labels.push(lbl);
+                xBars.push(mean);
+                rVals.push(rng);
+            }
+
+            const k = xBars.length;
+            if (k === 0) return;
+
+            const xDoubleBar = xBars.reduce((a, b) => a + b, 0) / k;
+            const rBar = rVals.reduce((a, b) => a + b, 0) / k;
+
+            const { A2, D3, D4 } = CONTROL_CONSTANTS[3];
+            const uclX = xDoubleBar + A2 * rBar;
+            const lclX = xDoubleBar - A2 * rBar;
+            const uclR = D4 * rBar;
+            const lclR = D3 * rBar;
+
+            document.getElementById('stab-xbar').textContent = xDoubleBar.toFixed(4);
+            document.getElementById('stab-ucl-x').textContent = uclX.toFixed(4);
+            document.getElementById('stab-lcl-x').textContent = lclX.toFixed(4);
+
+            document.getElementById('stab-rbar').textContent = rBar.toFixed(4);
+            document.getElementById('stab-ucl-r').textContent = uclR.toFixed(4);
+            document.getElementById('stab-lcl-r').textContent = lclR.toFixed(4);
+
+            const outOfControlX = xBars.some(x => x > uclX || x < lclX);
+            const outOfControlR = rVals.some(r => r > uclR || r < lclR);
+
+            const verdictEl = document.getElementById('stab-verdict');
+            if (!outOfControlX && !outOfControlR) {
+                verdictEl.className = 'p-4 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 text-xs';
+                verdictEl.innerHTML = '<strong>Sistema Estatisticamente Estável:</strong> Todos os pontos nas cartas de Média (X&#772;) e Amplitude (R) permanecem dentro dos limites de controle. Não há evidência de deriva ao longo do tempo.';
+            } else {
+                verdictEl.className = 'p-4 rounded-xl border bg-rose-50 border-rose-200 text-rose-900 text-xs';
+                verdictEl.innerHTML = '<strong>Instabilidade Detectada:</strong> Existem subgrupos fora dos limites de controle estatístico. Investigue causas especiais (desgaste, temperatura, calibração).';
+            }
+
+            renderChart('chart-stab-x', 'line', {
+                labels: labels,
+                datasets: [
+                    { label: 'Média Subgrupo', data: xBars, borderColor: '#2563eb', backgroundColor: '#2563eb', tension: 0.1 },
+                    { label: 'LSC', data: Array(k).fill(uclX), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0 },
+                    { label: 'Média Geral', data: Array(k).fill(xDoubleBar), borderColor: '#10b981', borderDash: [2, 2], pointRadius: 0 },
+                    { label: 'LIC', data: Array(k).fill(lclX), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0 }
+                ]
+            });
+
+            renderChart('chart-stab-r', 'line', {
+                labels: labels,
+                datasets: [
+                    { label: 'Amplitude (R)', data: rVals, borderColor: '#d97706', backgroundColor: '#d97706', tension: 0.1 },
+                    { label: 'LSC', data: Array(k).fill(uclR), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0 },
+                    { label: 'Amplitude Média', data: Array(k).fill(rBar), borderColor: '#10b981', borderDash: [2, 2], pointRadius: 0 }
+                ]
+            });
+        }
+
+        // =========================================================================
+        // HELPER PARA RENDERIZAR GRÁFICOS CHART.JS
+        // =========================================================================
+        function renderChart(canvasId, type, data, customOptions = {}) {
+            if (charts[canvasId]) {
+                charts[canvasId].destroy();
+            }
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            charts[canvasId] = new Chart(ctx, {
+                type: type,
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+                    },
+                    ...customOptions
+                }
+            });
+        }
+
+        // =========================================================================
+        // INICIALIZAÇÃO
+        // =========================================================================
+        function loadSampleData() {
+            document.getElementById('grr-parts').value = '10';
+            document.getElementById('grr-appraisers').value = '3';
+            document.getElementById('grr-trials').value = '3';
+            document.getElementById('grr-tolerance').value = '0.50';
+            rebuildGRRTable(true);
+
+            document.getElementById('bias-ref').value = '6.00';
+            document.getElementById('bias-tv').value = '0.50';
+            document.getElementById('bias-readings').value = '5.8, 5.7, 5.9, 5.9, 6.0, 6.1, 6.0, 5.9, 5.8, 6.0, 5.9, 5.9, 6.0, 5.9, 5.8';
+            calculateBias();
+
+            buildLinearityTable();
+
+            stabilityData = JSON.parse(JSON.stringify(SAMPLE_STABILITY));
+            buildStabilityTable();
+
+            showToast('Dados de exemplo do Manual AIAG carregados!');
+        }
+
+        window.onload = function () {
+            loadSampleData();
+        };
+    </script>
+</body>
+</html>
